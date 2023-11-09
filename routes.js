@@ -16,8 +16,7 @@ __.routes = [
 
   // DEFAULT CATCH ALL 
   [".*", (p) => {
-    __.renderLayout("auth", function() {
-      document.getElementById("authHead").innerHTML = Handlebars.compile(__.models.orgs.data.ui.templates.portal.head)();
+    __.renderLayout("auth", function() {      
       __.renderScreen("auth/login", p);
     })
 
@@ -32,7 +31,7 @@ $(document).ready(function() {
       __.router(true, 0, () => {
         __.ui.loading.body(true);
       });
-      
+
     });
 
 });

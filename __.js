@@ -1,5 +1,3 @@
-/*v012023.7*/
-
 var __ = {
   config: {},
   routes: [],
@@ -10,7 +8,7 @@ var __ = {
   params: {},
   data: {},
   js: null,
-  jss: {},
+  jss: {},  
   console: console,
   currentScript: document.currentScript,
   pageTitle:function(val, prepend){
@@ -117,7 +115,7 @@ var __ = {
 
       files.forEach(function(file) {
         if (file && file.length > 0 && __.loaded.indexOf(file) === -1) {
-          __.getScript(((typeof __.config !== "undefined" && typeof __.config.origin !== "undefined") ? __.config.origin : window.location.origin) + file + ((__.config.use_min) ? __.config.use_min : "") + ".js", function() {
+          __.getScript(((typeof __.config !== "undefined" && typeof __.config.origin !== "undefined") ? __.config.origin : window.location.origin) + file + ((__.config.use_min) ? __.config.use_min : "") + ((file.indexOf(".js")===-1) ? ".js" : "") , function() {
             __.loaded.push(file);
             loading--;
             if (loading <= 0) {
@@ -131,6 +129,12 @@ var __ = {
           }
         }
       })
+    }
+  },
+
+  unload:function(file){
+    if(__.loaded && __.loaded.indexOf(file)>-1){
+      __.loaded.splice(__.loaded.indexOf(file), 1);
     }
   },
 
@@ -311,9 +315,9 @@ var __ = {
   /*********************************************
       LOAD COMPONENT
   ******************************************** */
-  loadComponent: function(componentPath, domId, params, cb) {
+  loadComponent_0: function(componentPath, componentId , domId, params, cb) {
     var that = this;
-    var componentId = componentPath.replace(/\//g, "_").toLowerCase();
+    //var componentId = componentPath.replace(/\//g, "_").toLowerCase();
 
     this.components[componentId] = { "params": params };
     this.getContent(((typeof __.config !== "undefined" && typeof __.config.origin !== "undefined") ? __.config.origin : window.location.origin) + "/components/" + componentPath.toLowerCase() + "/ui" + ((__.config.use_min) ? __.config.use_min : "") + ".html", function(html) {
@@ -321,16 +325,11 @@ var __ = {
       if (document.getElementById(domId)) {
         document.getElementById(domId).innerHTML = html;
         that.getScript(((typeof __.config !== "undefined" && typeof __.config.origin !== "undefined") ? __.config.origin : window.location.origin) + "/components/" + componentPath.toLowerCase() + "/logic" + ((__.config.use_min) ? __.config.use_min : "") + ".js", function() {
-          if (cb) {
-            if (cb && typeof __.components[componentId.toLowerCase()].js !== "undefined" && typeof __.components[componentId.toLowerCase()].js.callback !== "undefined") {
-              __.components[componentId.toLowerCase()].js.callback = cb;
-            } else if (cb) {
-              cb();
-            }
             if (typeof __.components[componentId.toLowerCase()].js.onLoad !== "undefined") {
-              __.components[componentId.toLowerCase()].js.onLoad();
-            }
-          }
+              __.components[componentId.toLowerCase()].js.onLoad(cb);
+            }else if(typeof cb==="function"){
+              cb();
+            }          
         });
       } else {
         console.error("DOM Element Does Not Exist", domId);
@@ -340,22 +339,63 @@ var __ = {
     });
   },
 
+  loadComponent: function(componentPath, cb) {
+    var componentId = componentPath.replace(/\//g, "_").toLowerCase();
+
+    __.components[componentId] = {ui:""};
+    __.getContent(((typeof __.config !== "undefined" && typeof __.config.origin !== "undefined") ? __.config.origin : window.location.origin) + "/components/" + componentPath.toLowerCase() + "/ui" + ((__.config.use_min) ? __.config.use_min : "") + ".html", function(html) {
+      
+      __.components[componentId].ui = html;
+      __.getScript(((typeof __.config !== "undefined" && typeof __.config.origin !== "undefined") ? __.config.origin : window.location.origin) + "/components/" + componentPath.toLowerCase() + "/logic" + ((__.config.use_min) ? __.config.use_min : "") + ".js", function() {
+          if(typeof cb==="function"){ cb(); }          
+      });
+      
+
+    });
+  },
+
   /*********************************************
       RENDER LAYOUT
   ******************************************** */
+  currentLayout:"",
   renderLayout: function(layout, cb) {
-    this.getContent(((typeof __.config !== "undefined" && typeof __.config.origin !== "undefined") ? __.config.origin : window.location.origin) + "/layouts/" + layout.toLowerCase() + ((__.config.use_min) ? __.config.use_min : "") + ".html", function(html) {
-      if (document.getElementById("__layout")) {
-        document.getElementById("__layout").innerHTML = html;
-      } else {
-        document.body.innerHTML = html;
-      }
-      if (typeof cb === "function") { cb(); }
-    });
+    if(this.currentLayout===layout){
+      if (typeof cb === "function") { cb(true); }
+    }else{
+      this.currentLayout=layout;
+      this.getContent(((typeof __.config !== "undefined" && typeof __.config.origin !== "undefined") ? __.config.origin : window.location.origin) + "/layouts/" + layout.toLowerCase() + ((__.config.use_min) ? __.config.use_min : "") + ".html", function(html) {
+        if (document.getElementById("__layout")) {
+          document.getElementById("__layout").innerHTML = html;
+        } else {
+          document.body.innerHTML = html;
+        }
+        if (typeof cb === "function") { cb(); }
+      });
+    }
+
+    
   },
 
   shared: function(obj) {
     __.jss = Object.assign(__.jss, obj);
+  },
+
+  assign: function(obj) {
+    __.js = Object.assign(__.js, obj);
+  },
+
+  component:function(componentId, instanceId, params,  cb){
+    let obj={};
+    obj[instanceId] = Object.assign({}, __.components[componentId].js);
+    if(typeof __.js.component!=="object"){
+      __.js.component={};
+    }
+    __.js.component = Object.assign(__.js.component, obj);
+    if (typeof __.js.component[instanceId].autoLoad == "function") {
+      __.js.component[instanceId].autoLoad(params, cb);
+    }else if(typeof cb==="function"){
+      cb();
+    }
   },
 
   /*********************************************
@@ -367,6 +407,8 @@ var __ = {
     var isInvalid = false;
     function invalidFieldClass() { return ((__.config["invalid_field_class"]) ? __.config["invalid_field_class"] : "__is-invalid"); }
 
+    __.$.addClass(".__fem", "__hide");
+    
     els.forEach(function(el) {
       el.classList.remove(invalidFieldClass());
       if (el.getAttribute("required") !== null || el.getAttribute("required") === "required") {
@@ -516,10 +558,11 @@ var __ = {
   ******************************************** */
   getFormData: function(id) {
     var dtr = {};
-    document.querySelectorAll("#" + id + " input, #" + id + " select, #" + id + " textarea, #" + id + " range").forEach(function(el) {
+    document.querySelectorAll("#" + id + " input, #" + id + " select, #" + id + " textarea, #" + id + " range").forEach(async function(el) {
       //el.value = el.value.trim();     
       if (el.getAttribute("type") === "file") {
-        dtr[el.name] = el;
+        dtr[el.name] = el;       
+        
       } else if ((el.getAttribute("type") !== "checkbox" && el.getAttribute("type") !== "radio") || (el.getAttribute("type") === "checkbox" && el.checked) || (el.getAttribute("type") === "radio" && el.checked)) {
         if (typeof dtr[el.name] === "undefined") {
           
@@ -569,6 +612,8 @@ var __ = {
 
 
     });
+
+
     return dtr;
   },
 
@@ -792,6 +837,21 @@ var __ = {
     reader.readAsDataURL(file);
   },
 
+  fileToBase64Sync:function(file){
+    return new Promise(function(resolve, reject){
+      let reader = new FileReader();
+      reader.onload = function (e) {
+        if(e.target.result.split("base64,")[1]){
+          resolve({"name":file.name, "type":file.type, "size":file.size, "content":e.target.result.split("base64,")[1].trim()})
+        }else{
+          reject(null);
+        }
+      }
+
+      reader.readAsDataURL(file);
+    })
+    
+  },
   /*********************************************
       UI 
       Display loading icons
@@ -838,7 +898,7 @@ var __ = {
             document.getElementById(id).disabled = false;
           } else {
             document.getElementById(id).disabled = true;
-            document.getElementById(id).innerHTML = '<div id="' + id + 'Spinner" class="spinner mr-1"></div>' + document.getElementById(id).innerHTML;
+            document.getElementById(id).innerHTML = '<div id="' + id + 'Spinner" class="spinner mr-1"></div> ' + document.getElementById(id).innerHTML;
           }
         }
       },
@@ -858,96 +918,258 @@ var __ = {
     state: {
       get: function() { },
       get: function() { }
-    },
-    /*********************************************
+    },    
+  },
+
+  /*********************************************
       Jquery-like helpers
     ******************************************** */
-    $: {
-      prependHtml: function(el, html) { if (document.getElementById(el)) { document.getElementById(el).innerHTML = html + document.getElementById(el).innerHTML; } },
-      appendHtml: function(el, html) { if (document.getElementById(el)) { document.getElementById(el).innerHTML += html; } },
-      setHtml: function(el, html) { if (document.getElementById(el)) { document.getElementById(el).innerHTML = html; } },
-      getHtml: function(el, html) { if (document.getElementById(el)) { return document.getElementById(el).innerHTML } else { return ""; } },
-      addClass: function(selector, className) {
-        for (let el of document.querySelectorAll(selector)) {
-          if (!el.classList.contains(className)) {
-            el.classList.add(className);
+      $: {
+        prependHtml: function(el, html) { if (document.getElementById(el)) { document.getElementById(el).innerHTML = html + document.getElementById(el).innerHTML; } },
+        appendHtml: function(el, html) { if (document.getElementById(el)) { document.getElementById(el).innerHTML += html; } },
+        setHtml: function(el, html) { if (document.getElementById(el)) { document.getElementById(el).innerHTML = html; } },
+        getHtml: function(el, html) { if (document.getElementById(el)) { return document.getElementById(el).innerHTML } else { return ""; } },
+        addClass: function(selector, className) {
+          for (let el of document.querySelectorAll(selector)) {
+            if (!el.classList.contains(className)) {
+              el.classList.add(className);
+            }
+          }
+        },
+        removeClass: function(selector, className) {
+          for (let el of document.querySelectorAll(selector)) {
+            if (el.classList.contains(className)) {
+              el.classList.remove(className);
+            }
+          }
+        },
+  
+        setAttribute: function(selector, attrName, attrValue) {
+          for (let el of document.querySelectorAll(selector)) {
+            el.setAttribute(attrName, attrValue);
+          }
+        },
+  
+        removeAttribute: function(selector, attrName) {
+          for (let el of document.querySelectorAll(selector)) {
+            el.removeAttribute(attrName);
+          }
+        },
+  
+        check: function(selector) {
+          for (let el of document.querySelectorAll(selector)) {
+            el.checked = true;
+          }
+        },
+  
+        uncheck: function(selector) {
+          for (let el of document.querySelectorAll(selector)) {
+            el.checked = false;
+          }
+        },
+  
+        removeElement: function(selector) {
+          document.querySelectorAll(selector).forEach(function(a) {
+            a.remove()
+          })
+        },
+  
+        autopopulate:function(id, val){
+          let el = document.getElementById(id);
+          if(el && el.value==="" && val!==""){
+            el.value = val;
+            return true;
+          }else{
+            return false;
           }
         }
       },
-      removeClass: function(selector, className) {
-        for (let el of document.querySelectorAll(selector)) {
-          if (el.classList.contains(className)) {
-            el.classList.remove(className);
+
+  /******************************************
+   * AUTO COMPLETE
+   * __.autocomplete.apply("myInput2", countries);
+   * __.autocomplete.apply("myInput", operators, {"label":"label", "value":"id"});
+   ******************************************/
+  autocomplete:{
+    listener:false,
+    apply:function (id, arr, keys) {
+      let inp = document.getElementById(id);
+
+      let newElement = document.createElement('input');
+        newElement.type="hidden";
+        newElement.id=id+"_autocomplete";
+        newElement.name=id+"_autocomplete";
+
+      inp.parentNode.insertBefore(newElement, inp.nextSibling);
+
+      /*the autocomplete function takes two arguments,
+      the text field element and an array of possible autocompleted values:*/
+      var currentFocus;
+      /*execute a function when someone writes in the text field:*/
+      inp.addEventListener("input", function(e) {
+          var a, b, i, val = this.value;
+          /*close any already open lists of autocompleted values*/
+          closeAllLists();
+          if (!val) { return false;}
+          currentFocus = -1;
+          /*create a DIV element that will contain the items (values):*/
+          a = document.createElement("DIV");
+          a.setAttribute("id", this.id + "__autocomplete-list");
+          a.setAttribute("class", "__autocomplete-items");
+          /*append the DIV element as a child of the autocomplete container:*/
+          this.parentNode.appendChild(a);
+          /*for each item in the array...*/
+          
+          arr.forEach(function(item, itemIndex){
+            let itemLabel=item;
+            if(typeof item==="object"){
+              itemLabel=item[keys.label];
+            }
+            if (itemLabel.substr(0, val.length).toUpperCase() == val.toUpperCase()) {
+               /*create a DIV element for each matching element:*/
+               b = document.createElement("DIV");
+               /*make the matching letters bold:*/
+               b.innerHTML = "<strong>" + itemLabel.substr(0, val.length) + "</strong>";
+               b.innerHTML += itemLabel.substr(val.length);
+               /*insert a input field that will hold the current array item's value:*/
+               b.innerHTML += "<input type='hidden' value='" + itemLabel + "'>";               
+               /*execute a function when someone clicks on the item value (DIV element):*/
+               b.addEventListener("click", function(e) {
+                   /*insert the value for the autocomplete text field:*/
+                   inp.value = this.getElementsByTagName("input")[0].value;
+                   let selectedValue = inp.value;
+                   if(typeof arr[itemIndex]==="object"){
+                    selectedValue=arr[itemIndex][keys.value];
+                   }
+                   document.getElementById(id+"_autocomplete").value=selectedValue;
+                   /*close the list of autocompleted values,
+                   (or any other open lists of autocompleted values:*/
+                   closeAllLists();
+               });
+               a.appendChild(b);
+            }
+
+          })
+         
+      });
+     
+      
+      /*execute a function presses a key on the keyboard:*/
+      inp.addEventListener("keydown", function(e) {
+          var x = document.getElementById(this.id + "__autocomplete-list");
+          if (x) x = x.getElementsByTagName("div");
+          if (e.keyCode == 40) {
+            /*If the arrow DOWN key is pressed,
+            increase the currentFocus variable:*/
+            currentFocus++;
+            /*and and make the current item more visible:*/
+            addActive(x);
+          } else if (e.keyCode == 38) { //up
+            /*If the arrow UP key is pressed,
+            decrease the currentFocus variable:*/
+            currentFocus--;
+            /*and and make the current item more visible:*/
+            addActive(x);
+          } else if (e.keyCode == 13) {
+            /*If the ENTER key is pressed, prevent the form from being submitted,*/
+            e.preventDefault();
+            if (currentFocus > -1) {
+              /*and simulate a click on the "active" item:*/
+              if (x) x[currentFocus].click();
+            }
           }
-        }
-      },
-
-      setAttribute: function(selector, attrName, attrValue) {
-        for (let el of document.querySelectorAll(selector)) {
-          el.setAttribute(attrName, attrValue);
-        }
-      },
-
-      removeAttribute: function(selector, attrName) {
-        for (let el of document.querySelectorAll(selector)) {
-          el.removeAttribute(attrName);
-        }
-      },
-
-      check: function(selector) {
-        for (let el of document.querySelectorAll(selector)) {
-          el.checked = true;
-        }
-      },
-
-      uncheck: function(selector) {
-        for (let el of document.querySelectorAll(selector)) {
-          el.checked = false;
-        }
-      },
-
-      removeElement: function(selector) {
-        document.querySelectorAll(selector).forEach(function(a) {
-          a.remove()
-        })
+      });
+      function addActive(x) {
+        /*a function to classify an item as "active":*/
+        if (!x) return false;
+        /*start by removing the "active" class on all items:*/
+        removeActive(x);
+        if (currentFocus >= x.length) currentFocus = 0;
+        if (currentFocus < 0) currentFocus = (x.length - 1);
+        /*add class "__autocomplete-active":*/
+        x[currentFocus].classList.add("__autocomplete-active");
       }
+
+      function removeActive(x) {
+        /*a function to remove the "active" class from all autocomplete items:*/
+        for (var i = 0; i < x.length; i++) {
+          x[i].classList.remove("__autocomplete-active");
+        }
+      }
+      
+      function closeAllLists(elmnt) {
+        /*close all autocomplete lists in the document,
+        except the one passed as an argument:*/
+        var x = document.getElementsByClassName("__autocomplete-items");
+        for (var i = 0; i < x.length; i++) {
+          if (elmnt != x[i] && elmnt != inp) {
+            x[i].parentNode.removeChild(x[i]);
+          }
+        }
+      }
+      /*execute a function when someone clicks in the document:*/
+      if(!__.autocomplete.listener){
+        __.autocomplete.listener=true;
+        document.addEventListener("click", function (e) {
+          console.log("once");
+          closeAllLists(e.target);
+        });
+      }
+      
     }
+  },
+
+  /*********************************************
+        A simple toast UI element that displays for 3 seconds
+        m = message
+        c = style class
+        cb = callback once complete,
+        to = timeout
+  ******************************************** */
+  toast:function(m, c, to, cb) {
+
+    const ID="__toast"+Math.random().toString().split(".")[1]
+
+    if (document.getElementById(ID)) {
+      document.getElementById(ID).parentNode.removeChild(document.getElementById(ID));
+    }
+  
+    document.body.insertAdjacentHTML("beforeend", '<div id="'+ID+'" class="__toast">' + m.toString() + '</div>');
+  
+    if (!c) {
+      c = "__toast showToast"+((to) ? to : "");
+    } else {
+      c += " __toast showToast"+((to) ? to : "");
+    }
+  
+    document.getElementById(ID).className = c;
+    
+    setTimeout(function() {
+      if (document.getElementById(ID)) {
+        document.getElementById(ID).className = document.getElementById(ID).className.replace("showToast", "");      
+        if (typeof cb === "function") { cb(); }
+      }
+    }, ((to) ? (to+.4) * 1000 : 3000));
+  },
+
+/*****************************************************
+ * COLLECTION TO ARRAY
+ ****************************************************/
+  collectionToArray:function(collection, cols){
+    let row=[], output=[];
+    collection.forEach(function(obj){
+      row=[];
+      cols.forEach(function(col){
+        row.push(obj[col]);
+      });
+      output.push(row);
+    });
+    return output;
   }
+
+
 
 };
-
-
-/*********************************************
-      A simple toast UI element that displays for 3 seconds
-      m = message
-      c = style class
-      cb = callback once complete,
-      to = timeout
-******************************************** */
-window.__toast = function(m, c, cb, to) {
-
-  if (document.getElementById("__toast")) {
-    document.getElementById("__toast").parentNode.removeChild(document.getElementById("__toast"));
-  }
-
-  document.body.insertAdjacentHTML("beforeend", '<div id="__toast">' + m + '</div>');
-
-  if (!c) {
-    c = "showToast"+((to) ? to : "");
-  } else {
-    c += " showToast"+((to) ? to : "");
-  }
-
-  document.getElementById("__toast").className = c;
-  setTimeout(function() {
-    if (document.getElementById("__toast")) {
-      document.getElementById("__toast").className = document.getElementById("__toast").className.replace("showToast", "");
-      if (typeof cb === "function") {
-        cb();
-      }
-    }
-  }, ((to) ? (to+.8) * 1000 : 3000));
-}
 
 window.isMobile = function() {
   let check = false;
@@ -959,6 +1181,21 @@ window.isMobileOrTablet = function() {
   (function(a) { if (/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino|android|ipad|playbook|silk/i.test(a) || /1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0, 4))) check = true; })(navigator.userAgent || navigator.vendor || window.opera);
   return check;
 };
+
+window.removeCollectionRecord = function(collection, criteriaFn) {
+  // Use Array.findIndex to find the index of the element that satisfies the criteria
+  const indexToRemove = collection.findIndex(criteriaFn);
+
+  // Check if an element with the specified criteria was found
+  if (indexToRemove !== -1) {
+    // Use Array.splice to remove the element from the collection
+    collection.splice(indexToRemove, 1);
+  }
+
+  // Return the modified collection
+  return collection;
+}
+
 window.location.queryString = function(name) {
   var url = window.location.href;
   name = name.replace(/[\[\]]/g, '\\$&');
@@ -996,6 +1233,33 @@ if (!Object.assign) {
       target[srcKey] = src[srcKey];
     });
   }
+}
+
+if (!Object.nest) {
+Object.nest = function(jsonInput){
+  const result = {};
+
+  for (const key in jsonInput) {
+    if (jsonInput.hasOwnProperty(key)) {
+      const keys = key.split('.');
+      let currentObj = result;
+
+      for (let i = 0; i < keys.length; i++) {
+        const currentKey = keys[i];
+        if (!currentObj[currentKey]) {
+          if (i === keys.length - 1) {
+            currentObj[currentKey] = jsonInput[key];
+          } else {
+            currentObj[currentKey] = {};
+          }
+        }
+        currentObj = currentObj[currentKey];
+      }
+    }
+  }
+
+  return result;
+}
 }
 
 String.prototype.fuzzy = function(term, ratio) {
